@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中文情感分析小助手 v3.0</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    margin: 0; min-height: 100vh; padding: 36px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  .container { max-width: 820px; margin: 0 auto; }
+  h1 { text-align: center; color: #fff; margin: 0 0 4px; text-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  .version { text-align: center; color: rgba(255,255,255,.85); font-size: 14px; margin-bottom: 24px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 18px; box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+  .card h2 { margin: 0 0 12px; font-size: 16px; color: #444; border-left: 4px solid #667eea; padding-left: 8px; }
+  textarea {
+    width: 100%; height: 120px; padding: 12px; font-size: 15px;
+    border: 1px solid #d5d9e0; border-radius: 8px; resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: #667eea; }
+  .examples { margin-top: 8px; }
+  .examples button {
+    margin: 4px 6px 0 0; padding: 5px 12px; font-size: 13px;
+    background: #f0f2ff; color: #5a6acf; border: 1px solid #d8ddf5; border-radius: 14px; cursor: pointer;
+  }
+  .examples button:hover { background: #e2e6ff; }
+  .btn-main {
+    display: block; margin: 16px auto 0; padding: 11px 56px; font-size: 16px;
+    background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+    border: none; border-radius: 24px; cursor: pointer; letter-spacing: 4px;
+  }
+  .btn-main:hover { opacity: .9; }
+  .verdict-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .verdict-emoji { font-size: 44px; }
+  .verdict-text { font-size: 22px; font-weight: bold; }
+  .pos { color: #e74c3c; } .neg { color: #27ae60; } .neu { color: #7f8c8d; }
+  .score-bar-wrap { flex: 1; min-width: 220px; }
+  .score-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: #999; margin-bottom: 3px; }
+  .score-bar { height: 14px; border-radius: 7px; background: linear-gradient(90deg, #27ae60, #f1c40f, #e74c3c); position: relative; }
+  .score-pointer {
+    position: absolute; top: -4px; width: 4px; height: 22px;
+    background: #333; border-radius: 2px; transform: translateX(-50%);
+  }
+  .hl-pos { color: #e74c3c; font-weight: bold; background: #fdeeee; border-radius: 3px; padding: 0 2px; }
+  .hl-neg { color: #27ae60; font-weight: bold; background: #ebf7f0; border-radius: 3px; padding: 0 2px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { border: 1px solid #e8eaf0; padding: 7px 10px; text-align: left; }
+  th { background: #f7f8fc; color: #555; }
+  .history-item {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 8px 4px; border-bottom: 1px dashed #e5e7ef; font-size: 14px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-text { flex: 1; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .history-meta { color: #aaa; font-size: 12px; white-space: nowrap; }
+  .btn-small {
+    padding: 4px 12px; font-size: 12px; background: #fff; color: #999;
+    border: 1px solid #ddd; border-radius: 12px; cursor: pointer; float: right;
+  }
+  .btn-small:hover { color: #e74c3c; border-color: #e74c3c; }
+  .footer { text-align: center; color: rgba(255,255,255,.7); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎭 中文情感分析小助手</h1>
+  <p class="version">v3.0 最终版 —— 情感词典 + 否定翻转 + 程度加权 + 可视化</p>
+
+  <div class="card">
+    <h2>输入文本</h2>
+    <textarea id="inputText" placeholder="请输入要分析的中文文本……"></textarea>
+    <div class="examples">
+      试试示例：
+      <button onclick="fillExample(0)">好评示例</button>
+      <button onclick="fillExample(1)">差评示例</button>
+      <button onclick="fillExample(2)">否定句示例</button>
+      <button onclick="fillExample(3)">混合评价示例</button>
+    </div>
+    <button class="btn-main" onclick="analyze()">开始分析</button>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h2>分析结果</h2>
+    <div class="verdict-line">
+      <span class="verdict-emoji" id="vEmoji"></span>
+      <span class="verdict-text" id="vText"></span>
+      <div class="score-bar-wrap">
+        <div class="score-bar-label"><span>负面</span><span>中性</span><span>正面</span></div>
+        <div class="score-bar"><div class="score-pointer" id="vPointer"></div></div>
+      </div>
+    </div>
+    <p style="font-size:14px;color:#666">综合得分：<b id="vScore"></b>（&gt;0.5 判为正面，&lt;-0.5 判为负面，其余为中性）</p>
+    <h2 style="margin-top:18px">情感词高亮</h2>
+    <p id="highlighted" style="line-height:1.9"></p>
+    <h2 style="margin-top:18px">分句明细</h2>
+    <div id="detailTable"></div>
+  </div>
+
+  <div class="card">
+    <h2>历史记录 <button class="btn-small" onclick="clearHistory()">清空</button></h2>
+    <div id="historyList" style="clear:both"><span style="color:#bbb;font-size:14px">暂无记录</span></div>
+  </div>
+
+  <p class="footer">人工智能导论大作业 · Vibe Coding 应用 · 纯前端实现，无需联网</p>
+</div>
+
+<script>
+// ===== 情感词典（约 180 词） =====
+const POS_WORDS = ["好","很好","优秀","出色","棒","厉害","喜欢","喜爱","热爱","满意",
+  "开心","高兴","快乐","幸福","兴奋","惊喜","感动","温暖","贴心","舒服",
+  "舒适","方便","便捷","实用","好用","给力","完美","精彩","漂亮","美丽",
+  "美好","优雅","大气","干净","整洁","新鲜","实惠","划算","便宜","超值",
+  "推荐","点赞","赞","支持","信赖","信任","可靠","靠谱","专业","用心",
+  "细心","耐心","周到","热情","友好","亲切","顺利","成功","进步","提升",
+  "高效","快速","流畅","清晰","丰富","充实","有趣","好玩","生动","惊艳",
+  "良心","满分","好评","称赞","表扬","优惠","耐用","强大","不错","出彩",
+  "物美价廉","名不虚传","爱不释手","心旷神怡","无可挑剔","物超所值"];
+
+const NEG_WORDS = ["差","坏","烂","糟糕","糟","垃圾","失望","讨厌","厌恶","反感",
+  "生气","愤怒","恼火","郁闷","难过","伤心","痛苦","难受","烦","烦躁",
+  "无聊","枯燥","乏味","难看","丑","脏","乱","差劲","劣质","粗糙",
+  "简陋","破","破旧","缓慢","卡顿","卡","慢","迟钝","故障","毛病",
+  "缺陷","瑕疵","错误","漏洞","麻烦","复杂","难用","不便","昂贵","贵",
+  "坑","坑人","欺骗","骗","虚假","假","敷衍","冷漠","傲慢","粗鲁",
+  "无礼","失败","退步","下降","损坏","浪费","后悔","拥挤","吵","吵闹",
+  "嘈杂","异味","难闻","难吃","难喝","变质","过期","崩溃","闪退","死机",
+  "货不对板","名不副实","一言难尽","大失所望","忍无可忍","差评","投诉","退货","退款"];
+
+const NEGATIONS = ["不","没","没有","别","莫","勿","未","无","非","毫不","决不","难以","缺乏","不太","不够","不是"];
+
+const DEGREES = new Map(Object.entries({
+  "最": 2.0, "最为": 2.0, "极其": 1.9, "极度": 1.9,
+  "非常": 1.8, "特别": 1.8, "十分": 1.8, "超级": 1.8, "太": 1.7, "格外": 1.7,
+  "很": 1.5, "相当": 1.5, "真": 1.4, "挺": 1.4, "蛮": 1.3,
+  "比较": 1.2, "较为": 1.2, "还算": 1.1,
+  "有点": 0.7, "有些": 0.7, "稍微": 0.6, "略微": 0.6, "略": 0.6
+}));
+
+const SENTIMENT = new Map();
+POS_WORDS.forEach(w => SENTIMENT.set(w, 1));
+NEG_WORDS.forEach(w => SENTIMENT.set(w, -1));
+let MAX_LEN = 1;
+SENTIMENT.forEach((v, w) => { if (w.length > MAX_LEN) MAX_LEN = w.length; });
+
+const EXAMPLES = [
+  "这家餐厅的菜很好吃，环境干净整洁，服务也特别周到，强烈推荐！",
+  "物流太慢了，包装粗糙，客服态度冷漠，非常失望，不会再买了。",
+  "这个手机不好用，屏幕也不清晰。",
+  "质量不差，做工还算精细，就是价格有点贵。"
+];
+
+// ===== 核心算法（与 v2 相同思路：最长匹配 + 回看窗口） =====
+function splitClauses(text) {
+  return text.split(/[。！？!?；;，,、\n\r]+/).filter(s => s.trim().length > 0);
+}
+
+function analyzeClause(clause) {
+  const found = [];
+  let i = 0;
+  while (i < clause.length) {
+    let matched = null;
+    for (let len = Math.min(MAX_LEN, clause.length - i); len >= 1; len--) {
+      const seg = clause.substr(i, len);
+      if (SENTIMENT.has(seg)) {
+        matched = { word: seg, polarity: SENTIMENT.get(seg), index: i };
+        break;
+      }
+    }
+    if (matched) { found.push(matched); i += matched.word.length; }
+    else { i++; }
+  }
+
+  let clauseScore = 0;
+  const details = [];
+  let prevEnd = 0;
+  for (const m of found) {
+    const window = clause.slice(prevEnd, m.index);
+    let weight = 1, negCount = 0;
+    const modifiers = [];
+    let j = 0;
+    while (j < window.length) {
+      let hit = null;
+      for (let len = Math.min(3, window.length - j); len >= 1; len--) {
+        const seg = window.substr(j, len);
+        if (DEGREES.has(seg)) { hit = { type: "deg", w: seg, v: DEGREES.get(seg) }; break; }
+        if (NEGATIONS.includes(seg)) { hit = { type: "neg", w: seg }; break; }
+      }
+      if (hit) {
+        if (hit.type === "deg") weight *= hit.v;
+        else negCount++;
+        modifiers.push(hit.w);
+        j += hit.w.length;
+      } else { j++; }
+    }
+    let value = m.polarity * weight;
+    if (negCount > 0) value = value * Math.pow(-0.8, negCount);
+    clauseScore += value;
+    details.push({ word: m.word, index: m.index, modifiers: modifiers, value: value });
+    prevEnd = m.index + m.word.length;
+  }
+  return { clause: clause, score: clauseScore, details: details };
+}
+
+// ===== 页面交互 =====
+function fillExample(i) {
+  document.getElementById("inputText").value = EXAMPLES[i];
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// 按命中位置给短句生成高亮 HTML
+function highlightClause(r) {
+  let html = "", cursor = 0;
+  for (const d of r.details) {
+    html += escapeHtml(r.clause.slice(cursor, d.index));
+    const cls = d.value >= 0 ? "hl-pos" : "hl-neg";
+    html += '<span class="' + cls + '">' + escapeHtml(d.word) + "</span>";
+    cursor = d.index + d.word.length;
+  }
+  html += escapeHtml(r.clause.slice(cursor));
+  return html;
+}
+
+function analyze() {
+  const text = document.getElementById("inputText").value.trim();
+  if (!text) { alert("请先输入要分析的文本！"); return; }
+
+  const results = splitClauses(text).map(analyzeClause);
+  const total = results.reduce((s, r) => s + r.score, 0);
+
+  let emoji, vtext, cls;
+  if (total > 0.5) { emoji = "😊"; vtext = "正面"; cls = "pos"; }
+  else if (total < -0.5) { emoji = "😞"; vtext = "负面"; cls = "neg"; }
+  else { emoji = "😐"; vtext = "中性"; cls = "neu"; }
+
+  document.getElementById("resultCard").style.display = "block";
+  document.getElementById("vEmoji").textContent = emoji;
+  const vText = document.getElementById("vText");
+  vText.textContent = vtext;
+  vText.className = "verdict-text " + cls;
+  document.getElementById("vScore").textContent = total.toFixed(2);
+
+  // 得分指针：用 tanh 把任意得分压缩到 0~100% 区间
+  const percent = 50 + 50 * Math.tanh(total / 4);
+  document.getElementById("vPointer").style.left = percent.toFixed(1) + "%";
+
+  document.getElementById("highlighted").innerHTML = results.map(highlightClause).join("，");
+
+  let rows = "";
+  for (const r of results) {
+    const detailStr = r.details.length
+      ? r.details.map(d => (d.modifiers.length ? d.modifiers.join("") + "+" : "") + d.word + "（" + d.value.toFixed(2) + "）").join("；")
+      : "未发现情感词";
+    rows += "<tr><td>" + escapeHtml(r.clause) + "</td><td>" + r.score.toFixed(2) + "</td><td>" + escapeHtml(detailStr) + "</td></tr>";
+  }
+  document.getElementById("detailTable").innerHTML =
+    "<table><tr><th>短句</th><th>得分</th><th>命中明细（修饰词+情感词）</th></tr>" + rows + "</table>";
+
+  saveHistory(text, vtext, total);
+}
+
+// ===== 历史记录（localStorage 持久化） =====
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("sentimentHistory")) || []; }
+  catch (e) { return []; }
+}
+
+function saveHistory(text, verdict, score) {
+  const list = loadHistory();
+  list.unshift({
+    text: text.length > 40 ? text.slice(0, 40) + "…" : text,
+    verdict: verdict,
+    score: score.toFixed(2),
+    time: new Date().toLocaleString("zh-CN")
+  });
+  if (list.length > 20) list.length = 20;
+  localStorage.setItem("sentimentHistory", JSON.stringify(list));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = loadHistory();
+  const box = document.getElementById("historyList");
+  if (!list.length) {
+    box.innerHTML = '<span style="color:#bbb;font-size:14px">暂无记录</span>';
+    return;
+  }
+  box.innerHTML = list.map(item => {
+    const cls = item.verdict === "正面" ? "pos" : (item.verdict === "负面" ? "neg" : "neu");
+    return '<div class="history-item"><span class="history-text">' + escapeHtml(item.text) + "</span>" +
+      '<span class="' + cls + '">' + item.verdict + " " + item.score + "</span>" +
+      '<span class="history-meta">' + item.time + "</span></div>";
+  }).join("");
+}
+
+function clearHistory() {
+  localStorage.removeItem("sentimentHistory");
+  renderHistory();
+}
+
+renderHistory();
+</script>
+</body>
+</html>
